@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Messenger</title>
+    <style>
+        /* Фоновое изображение */
+        body {
+            background-image: url('https://images.unsplash.com/photo-1556761175-5973dc0f32e7');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Затемнение фона для лучшей читаемости */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: -1;
+        }
+
+        /* Стили для формы конфигурации */
+        #serverConfig {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .config-form {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .config-form h2 {
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 300;
+            font-size: 28px;
+        }
+
+        .config-form p {
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 16px;
+        }
+
+        .config-form input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .config-form input:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
+            background: white;
+        }
+
+        .config-form .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .config-form button {
+            flex: 1;
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .config-form button.save {
+            background: linear-gradient(135deg, #34c759, #28a745);
+        }
+
+        .config-form .examples {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .config-form .examples strong {
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        /* Стили для основного приложения */
+        #app {
+            display: none;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            max-width: 800px;
+            width: 90%;
+            min-height: 500px;
+            margin: 40px auto;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .app-header h1 {
+            color: #333;
+            margin: 0;
+            font-weight: 300;
+            font-size: 32px;
+        }
+
+        .server-info {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border-left: 4px solid #4a90e2;
+        }
+
+        .server-info .label {
+            font-weight: 600;
+            color: #333;
+            margin-right: 10px;
+        }
+
+        .server-info .address {
+            font-family: 'Courier New', monospace;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .change-server-btn {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            float: right;
+        }
+
+        .messenger-interface {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .messenger-interface .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.7;
+        }
+
+        .messenger-interface h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+    </style>
+</head>
+<body>
+    <!-- Форма настройки сервера -->
+    <div id="serverConfig">
+        <div class="config-form">
+            <h2>🔗 P2P Messenger</h2>
+            <p>Подключение к серверу мессенджера</p>
+            
+            <input type="text" id="serverInput" placeholder="Введите server:port" value="localhost:8080">
+            
+            <div class="button-group">
+                <button onclick="connectToServer()">🔌 Подключиться</button>
+                <button onclick="saveAndConnect()" class="save">💾 Сохранить</button>
+            </div>
+            
+            <div class="examples">
+                <strong>Примеры серверов:</strong>
+                localhost:8080<br>
+                192.168.1.100:8080<br>
+                myserver.com:8080
+            </div>
+        </div>
+    </div>
+
+    <!-- Основное приложение -->
+    <div id="app">
+        <div class="app-header">
+            <h1>💬 P2P Messenger</h1>
+        </div>
+        
+        <div class="server-info">
+            <span class="label">📍 Подключено к:</span>
+            <span class="address" id="currentServer">...</span>
+            <button class="change-server-btn" onclick="showConfig()">
+                ⚙️ Сменить сервер
+            </button>
+            <div style="clear: both;"></div>
+        </div>
+        
+        <!-- Заглушка интерфейса мессенджера -->
+        <div class="messenger-interface">
+            <div class="icon">💬</div>
+            <h3>Добро пожаловать в P2P Messenger!</h3>
+            <p>Интерфейс мессенджера будет отображен здесь</p>
+            <p style="font-size: 14px; opacity: 0.7; margin-top: 20px;">
+                ✓ Успешное подключение к серверу<br>
+                ✓ Готов к отправке сообщений
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Функции для управления сервером
+        function getStoredServer() {
+            return localStorage.getItem('messenger_server');
+        }
+
+        function setStoredServer(server) {
+            localStorage.setItem('messenger_server', server);
+        }
+
+        function connectToServer() {
+            const server = document.getElementById('serverInput').value.trim();
+            if (!server) {
+                alert('Пожалуйста, введите адрес сервера');
+                return;
+            }
+            initializeApp(server, false);
+        }
+
+        function saveAndConnect() {
+            const server = document.getElementById('serverInput').value.trim();
+            if (!server) {
+                alert('Пожалуйста, введите адрес сервера');
+                return;
+            }
+            initializeApp(server, true);
+        }
+
+        function showConfig() {
+            document.getElementById('serverConfig').style.display = 'flex';
+            document.getElementById('app').style.display = 'none';
+        }
+
+        function initializeApp(server, saveToStorage = false) {
+            if (saveToStorage) {
+                setStoredServer(server);
+            }
+            
+            // Скрываем форму, показываем приложение
+            document.getElementById('serverConfig').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            document.getElementById('currentServer').textContent = server;
+            
+            // Инициализируем основное приложение
+            window.SERVER_ADDRESS = server;
+            window.WS_URL = `ws://${server}/ws`;
+            window.API_BASE = `http://${server}/api`;
+            
+            console.log('Connecting to:', window.WS_URL);
+        }
+
+        // При загрузке проверяем сохраненный сервер
+        window.addEventListener('load', function() {
+            const savedServer = getStoredServer();
+            if (savedServer) {
+                document.getElementById('serverInput').value = savedServer;
+                initializeApp(savedServer, false);
+            }
+        });
+    </script>
+</body>
+</html>
