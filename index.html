@@ -447,6 +447,17 @@
         .fade-in {
             animation: fadeIn 0.3s ease;
         }
+
+        /* Состояния отключения */
+        .disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -465,9 +476,9 @@
             
             <div class="examples">
                 <strong>Примеры серверов:</strong>
-                localhost:8080<br>
-                192.168.1.100:8080<br>
-                myserver.com:8080
+                localhost:8080 (TCP для десктопного клиента)<br>
+                localhost:8081 (HTTP для веб-клиента)<br>
+                192.168.1.100:8080
             </div>
         </div>
     </div>
@@ -487,6 +498,8 @@
         <div class="server-info">
             <span class="label">📍 Подключено к:</span>
             <span class="address" id="currentServer">...</span>
+            <span class="label" style="margin-left: 20px;">🌐 HTTP Порт:</span>
+            <span class="address" id="httpPort">8081</span>
             <div style="clear: both;"></div>
         </div>
         
@@ -505,18 +518,22 @@
 
                 <div class="list-header">👥 Контакты</div>
                 <div class="contacts-list" id="contactsList">
-                    <!-- Контакты будут загружены здесь -->
+                    <div style="text-align: center; color: #666; padding: 20px;">
+                        Войдите в систему чтобы увидеть контакты
+                    </div>
                 </div>
 
                 <div class="list-header">👥 Группы</div>
                 <div class="groups-list" id="groupsList">
-                    <!-- Группы будут загружены здесь -->
+                    <div style="text-align: center; color: #666; padding: 20px;">
+                        Войдите в систему чтобы увидеть группы
+                    </div>
                 </div>
 
-                <button onclick="showAddContactForm()" class="send-btn" style="background: linear-gradient(135deg, #ff6b6b, #ee5a52);">
+                <button onclick="showAddContactForm()" class="send-btn" style="background: linear-gradient(135deg, #ff6b6b, #ee5a52);" id="addContactBtn" disabled>
                     ➕ Добавить контакт
                 </button>
-                <button onclick="showCreateGroupForm()" class="send-btn" style="background: linear-gradient(135deg, #ffd60a, #ffc300); color: #333; margin-top: 10px;">
+                <button onclick="showCreateGroupForm()" class="send-btn" style="background: linear-gradient(135deg, #ffd60a, #ffc300); color: #333; margin-top: 10px;" id="createGroupBtn" disabled>
                     🏠 Создать группу
                 </button>
             </div>
@@ -524,19 +541,23 @@
             <!-- Область чата -->
             <div class="chat-area">
                 <div class="chat-header">
-                    <h3 id="chatTitle">Выберите чат для начала общения</h3>
+                    <h3 id="chatTitle">Добро пожаловать в P2P Messenger!</h3>
                 </div>
                 
                 <div class="messages-container" id="messagesContainer">
                     <div style="text-align: center; color: #666; padding: 40px;">
                         <div style="font-size: 48px; margin-bottom: 20px;">💬</div>
                         <h3>Добро пожаловать в P2P Messenger!</h3>
-                        <p>Выберите контакт или группу слева чтобы начать общение</p>
+                        <p>Войдите в систему чтобы начать общение</p>
+                        <p style="font-size: 12px; margin-top: 20px;">
+                            🔌 TCP порт: 8080 (для десктопного клиента)<br>
+                            🌐 HTTP порт: 8081 (для веб-клиента)
+                        </p>
                     </div>
                 </div>
 
                 <div class="input-area">
-                    <input type="text" id="messageInput" placeholder="Введите сообщение..." class="message-input" disabled>
+                    <input type="text" id="messageInput" placeholder="Войдите в систему чтобы отправлять сообщения..." class="message-input" disabled>
                     <button onclick="sendMessage()" id="sendBtn" class="send-btn" disabled>📤 Отправить</button>
                 </div>
             </div>
@@ -651,8 +672,6 @@
         let currentUser = null;
         let currentChat = null;
         let chatType = null; // 'contact' или 'group'
-        let wsConnection = null;
-        let messageQueue = [];
         let isConnected = false;
 
         // Функции для управления сервером
@@ -685,7 +704,6 @@
         function showConfig() {
             document.getElementById('serverConfig').style.display = 'flex';
             document.getElementById('app').style.display = 'none';
-            disconnectWebSocket();
             currentUser = null;
             updateUI();
         }
@@ -701,123 +719,15 @@
             document.getElementById('currentServer').textContent = server;
             
             // Инициализируем основное приложение
+            const [host, port] = server.split(':');
+            const httpPort = '8081'; // HTTP порт для API
+            
             window.SERVER_ADDRESS = server;
-            window.API_BASE = `http://${server}`;
+            window.API_BASE = `http://${host}:${httpPort}/api`;
             
-            console.log('Connecting to:', window.API_BASE);
+            console.log('TCP Server:', server);
+            console.log('HTTP API:', window.API_BASE);
             showNotification('Успешное подключение к серверу', 'success');
-        }
-
-        // WebSocket соединение
-        function connectWebSocket() {
-            if (!currentUser) return;
-            
-            try {
-                const wsUrl = `ws://${window.SERVER_ADDRESS}/ws?username=${currentUser}`;
-                wsConnection = new WebSocket(wsUrl);
-                
-                wsConnection.onopen = function() {
-                    console.log('WebSocket connected');
-                    isConnected = true;
-                    showNotification('WebSocket подключен', 'success');
-                    
-                    // Отправляем накопившиеся сообщения
-                    while (messageQueue.length > 0) {
-                        const message = messageQueue.shift();
-                        wsConnection.send(JSON.stringify(message));
-                    }
-                };
-                
-                wsConnection.onmessage = function(event) {
-                    const data = JSON.parse(event.data);
-                    handleIncomingMessage(data);
-                };
-                
-                wsConnection.onclose = function() {
-                    console.log('WebSocket disconnected');
-                    isConnected = false;
-                    showNotification('WebSocket отключен', 'warning');
-                    
-                    // Попытка переподключения через 5 секунд
-                    setTimeout(connectWebSocket, 5000);
-                };
-                
-                wsConnection.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    showNotification('Ошибка WebSocket', 'error');
-                };
-                
-            } catch (error) {
-                console.error('Failed to connect WebSocket:', error);
-                showNotification('Не удалось подключиться к WebSocket', 'error');
-            }
-        }
-
-        function disconnectWebSocket() {
-            if (wsConnection) {
-                wsConnection.close();
-                wsConnection = null;
-            }
-            isConnected = false;
-        }
-
-        // Обработка входящих сообщений
-        function handleIncomingMessage(data) {
-            if (data.type === 'message') {
-                displayMessage(data);
-            } else if (data.type === 'notification') {
-                showNotification(data.message, data.status || 'info');
-            }
-        }
-
-        // Функции для форм
-        function showLoginForm() {
-            document.getElementById('loginForm').style.display = 'flex';
-        }
-
-        function hideLoginForm() {
-            document.getElementById('loginForm').style.display = 'none';
-        }
-
-        function showRegisterForm() {
-            document.getElementById('registerForm').style.display = 'flex';
-        }
-
-        function hideRegisterForm() {
-            document.getElementById('registerForm').style.display = 'none';
-        }
-
-        function showRecoveryForm() {
-            hideLoginForm();
-            document.getElementById('recoveryForm').style.display = 'flex';
-        }
-
-        function hideRecoveryForm() {
-            document.getElementById('recoveryForm').style.display = 'none';
-        }
-
-        function showAddContactForm() {
-            if (!currentUser) {
-                showNotification('Сначала войдите в систему', 'error');
-                return;
-            }
-            document.getElementById('addContactForm').style.display = 'flex';
-        }
-
-        function hideAddContactForm() {
-            document.getElementById('addContactForm').style.display = 'none';
-        }
-
-        function showCreateGroupForm() {
-            if (!currentUser) {
-                showNotification('Сначала войдите в систему', 'error');
-                return;
-            }
-            document.getElementById('createGroupForm').style.display = 'flex';
-        }
-
-        function hideCreateGroupForm() {
-            document.getElementById('createGroupForm').style.display = 'none';
         }
 
         // API функции
@@ -829,7 +739,10 @@
                     ...data
                 };
 
-                const response = await fetch(`http://${window.SERVER_ADDRESS}`, {
+                console.log('Sending request to:', window.API_BASE);
+                console.log('Request data:', request);
+
+                const response = await fetch(window.API_BASE, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -837,12 +750,16 @@
                     body: JSON.stringify(request)
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const result = await response.json();
                 return result;
             } catch (error) {
                 console.error('API request failed:', error);
                 showNotification('Ошибка соединения с сервером', 'error');
-                return { status: 'error', message: 'Connection failed' };
+                return { status: 'error', message: 'Connection failed: ' + error.message };
             }
         }
 
@@ -856,13 +773,14 @@
                 return;
             }
 
+            showLoading(true);
             const result = await makeRequest('login', { username, password });
+            showLoading(false);
             
             if (result.status === 'success') {
                 currentUser = username;
                 hideLoginForm();
                 updateUI();
-                connectWebSocket();
                 loadContacts();
                 loadGroups();
                 showNotification('Успешный вход в систему', 'success');
@@ -881,7 +799,9 @@
                 return;
             }
 
+            showLoading(true);
             const result = await makeRequest('register', { username, password, email });
+            showLoading(false);
             
             if (result.status === 'success') {
                 hideRegisterForm();
@@ -900,7 +820,9 @@
                 return;
             }
 
+            showLoading(true);
             const result = await makeRequest('recover', { username, email });
+            showLoading(false);
             
             if (result.status === 'success') {
                 hideRecoveryForm();
@@ -919,7 +841,9 @@
                 return;
             }
 
+            showLoading(true);
             const result = await makeRequest('add_contact', { contact });
+            showLoading(false);
             
             if (result.status === 'success') {
                 hideAddContactForm();
@@ -940,7 +864,9 @@
                 return;
             }
 
+            showLoading(true);
             const result = await makeRequest('create_group', { name, members });
+            showLoading(false);
             
             if (result.status === 'success') {
                 hideCreateGroupForm();
@@ -954,7 +880,10 @@
         async function loadContacts() {
             if (!currentUser) return;
 
+            showLoading(true);
             const result = await makeRequest('get_contacts');
+            showLoading(false);
+            
             if (result.status === 'success') {
                 displayContacts(result.data || []);
             }
@@ -963,10 +892,11 @@
         async function loadGroups() {
             if (!currentUser) return;
 
-            // В реальной реализации здесь был бы запрос к API
-            // Пока используем заглушку
+            showLoading(true);
+            // Временная заглушка для групп
             const groups = [];
             displayGroups(groups);
+            showLoading(false);
         }
 
         function displayContacts(contacts) {
@@ -1030,6 +960,7 @@
             // Активируем поле ввода
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
+            document.getElementById('messageInput').placeholder = "Введите сообщение...";
             
             // Загружаем историю сообщений
             loadMessages();
@@ -1038,7 +969,10 @@
         async function loadMessages() {
             if (!currentUser || !currentChat) return;
 
+            showLoading(true);
             const result = await makeRequest('get_messages');
+            showLoading(false);
+            
             if (result.status === 'success') {
                 displayMessages(result.data || []);
             }
@@ -1093,7 +1027,6 @@
             }
 
             const messageData = {
-                action: 'send_message',
                 to: chatType === 'contact' ? currentChat : '',
                 content: content,
                 is_group: chatType === 'group',
@@ -1117,7 +1050,9 @@
             input.value = '';
 
             // Отправляем на сервер
+            showLoading(true);
             const result = await makeRequest('send_message', messageData);
+            showLoading(false);
             
             if (result.status !== 'success') {
                 showNotification('Не удалось отправить сообщение', 'error');
@@ -1130,28 +1065,41 @@
             const usernameElement = document.getElementById('currentUsername');
             const loginBtn = document.getElementById('loginBtn');
             const registerBtn = document.getElementById('registerBtn');
+            const addContactBtn = document.getElementById('addContactBtn');
+            const createGroupBtn = document.getElementById('createGroupBtn');
+            const messageInput = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
 
             if (currentUser) {
                 usernameElement.textContent = currentUser;
                 loginBtn.textContent = '🚪 Выйти';
                 loginBtn.onclick = logout;
                 registerBtn.style.display = 'none';
+                addContactBtn.disabled = false;
+                createGroupBtn.disabled = false;
+                messageInput.placeholder = "Войдите в систему чтобы отправлять сообщения...";
             } else {
                 usernameElement.textContent = 'Не авторизован';
                 loginBtn.textContent = '🔑 Войти';
                 loginBtn.onclick = showLoginForm;
                 registerBtn.style.display = 'block';
+                addContactBtn.disabled = true;
+                createGroupBtn.disabled = true;
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+               messageInput.placeholder = "Войдите в систему чтобы отправлять сообщения...";
                 
                 // Очищаем чаты
-                document.getElementById('contactsList').innerHTML = '';
-                document.getElementById('groupsList').innerHTML = '';
+                document.getElementById('contactsList').innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Войдите в систему чтобы увидеть контакты</div>';
+                document.getElementById('groupsList').innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Войдите в систему чтобы увидеть группы</div>';
                 document.getElementById('messagesContainer').innerHTML = `
                     <div style="text-align: center; color: #666; padding: 40px;">
                         <div style="font-size: 48px; margin-bottom: 20px;">💬</div>
                         <h3>Добро пожаловать в P2P Messenger!</h3>
-                        <p>Выберите контакт или группу слева чтобы начать общение</p>
+                        <p>Войдите в систему чтобы начать общение</p>
                     </div>
                 `;
+                document.getElementById('chatTitle').textContent = 'Добро пожаловать в P2P Messenger!';
             }
         }
 
@@ -1159,7 +1107,6 @@
             currentUser = null;
             currentChat = null;
             chatType = null;
-            disconnectWebSocket();
             updateUI();
             showNotification('Вы вышли из системы', 'success');
         }
@@ -1174,10 +1121,79 @@
             }, 3000);
         }
 
+        function showLoading(show) {
+            const app = document.getElementById('app');
+            if (show) {
+                app.classList.add('loading');
+            } else {
+                app.classList.remove('loading');
+            }
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Функции для форм
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'flex';
+        }
+
+        function hideLoginForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+        }
+
+        function showRegisterForm() {
+            document.getElementById('registerForm').style.display = 'flex';
+        }
+
+        function hideRegisterForm() {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('registerUsername').value = '';
+            document.getElementById('registerPassword').value = '';
+            document.getElementById('registerEmail').value = '';
+        }
+
+        function showRecoveryForm() {
+            hideLoginForm();
+            document.getElementById('recoveryForm').style.display = 'flex';
+        }
+
+        function hideRecoveryForm() {
+            document.getElementById('recoveryForm').style.display = 'none';
+            document.getElementById('recoveryUsername').value = '';
+            document.getElementById('recoveryEmail').value = '';
+        }
+
+        function showAddContactForm() {
+            if (!currentUser) {
+                showNotification('Сначала войдите в систему', 'error');
+                return;
+            }
+            document.getElementById('addContactForm').style.display = 'flex';
+        }
+
+        function hideAddContactForm() {
+            document.getElementById('addContactForm').style.display = 'none';
+            document.getElementById('contactUsername').value = '';
+        }
+
+        function showCreateGroupForm() {
+            if (!currentUser) {
+                showNotification('Сначала войдите в систему', 'error');
+                return;
+            }
+            document.getElementById('createGroupForm').style.display = 'flex';
+        }
+
+        function hideCreateGroupForm() {
+            document.getElementById('createGroupForm').style.display = 'none';
+            document.getElementById('groupName').value = '';
+            document.getElementById('groupMembers').value = '';
         }
 
         // Обработчики событий
@@ -1185,6 +1201,15 @@
             if (e.key === 'Enter') {
                 sendMessage();
             }
+        });
+
+        // Закрытие форм по клику на overlay
+        document.querySelectorAll('.form-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.style.display = 'none';
+                }
+            });
         });
 
         // Инициализация при загрузке
